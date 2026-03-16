@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QMainWindow,
+    QGraphicsEllipseItem,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -18,7 +19,8 @@ from PySide6.QtWidgets import (
 
 
 class BlockItem(QGraphicsRectItem):
-    GRID_SIZE = 40
+    SNAP_DISTANCE = 30
+    CONNECTOR_RADIUS = 5
 
     def __init__(self, text: str, x: float = 0, y: float = 0) -> None:
         super().__init__(0, 0, 140, 50)
@@ -27,8 +29,8 @@ class BlockItem(QGraphicsRectItem):
         self.setPen(QPen(QColor(220, 220, 220), 1))
 
         self.setFlags(
-            QGraphicsItem.ItemIsMovable
-            | QGraphicsItem.ItemIsSelectable
+            QGraphicsItem.ItemIsMovable |
+            QGraphicsItem.ItemIsSelectable
         )
 
         self.setPos(x, y)
@@ -44,12 +46,61 @@ class BlockItem(QGraphicsRectItem):
         label_y = (rect.height() - text_rect.height()) / 2
         self.label.setPos(label_x, label_y)
 
+        self._create_connectors()
+
+    def _create_connectors(self) -> None:
+        rect = self.rect()
+        r = self.CONNECTOR_RADIUS
+        connector_brush = QBrush(QColor(235, 235, 235))
+        connector_pen = QPen(QColor(40, 40, 40), 1)
+
+        center_y = rect.height() / 2 - r
+
+        self.left_connector = QGraphicsEllipseItem(-r, center_y, 2 * r, 2 * r, self)
+        self.left_connector.setBrush(connector_brush)
+        self.left_connector.setPen(connector_pen)
+
+        self.right_connector = QGraphicsEllipseItem(
+            rect.width() - r, center_y, 2 * r, 2 * r, self
+        )
+        self.right_connector.setBrush(connector_brush)
+        self.right_connector.setPen(connector_pen)
+
     def mouseReleaseEvent(self, event) -> None:
         super().mouseReleaseEvent(event)
+        self.snap_to_nearest_block()
 
-        x = round(self.pos().x() / self.GRID_SIZE) * self.GRID_SIZE
-        y = round(self.pos().y() / self.GRID_SIZE) * self.GRID_SIZE
-        self.setPos(x, y)
+    def snap_to_nearest_block(self) -> None:
+        scene = self.scene()
+        if scene is None:
+            return
+
+        my_rect = self.sceneBoundingRect()
+
+        for item in scene.items():
+            if item is self:
+                continue
+
+            if not isinstance(item, BlockItem):
+                continue
+
+            other_rect = item.sceneBoundingRect()
+
+            # Snap my left side to other's right side
+            if abs(my_rect.left() - other_rect.right()) < self.SNAP_DISTANCE:
+                if abs(my_rect.center().y() - other_rect.center().y()) < self.SNAP_DISTANCE:
+                    new_x = other_rect.right()
+                    new_y = other_rect.center().y() - my_rect.height() / 2
+                    self.setPos(new_x, new_y)
+                    return
+
+            # Snap my right side to other's left side
+            if abs(my_rect.right() - other_rect.left()) < self.SNAP_DISTANCE:
+                if abs(my_rect.center().y() - other_rect.center().y()) < self.SNAP_DISTANCE:
+                    new_x = other_rect.left() - my_rect.width()
+                    new_y = other_rect.center().y() - my_rect.height() / 2
+                    self.setPos(new_x, new_y)
+                    return
 
 
 class WorkspaceView(QGraphicsView):
