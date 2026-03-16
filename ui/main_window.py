@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
 
 
 class BlockItem(QGraphicsRectItem):
+    GRID_SIZE = 40
+
     def __init__(self, text: str, x: float = 0, y: float = 0) -> None:
         super().__init__(0, 0, 140, 50)
 
@@ -41,6 +43,13 @@ class BlockItem(QGraphicsRectItem):
         label_x = (rect.width() - text_rect.width()) / 2
         label_y = (rect.height() - text_rect.height()) / 2
         self.label.setPos(label_x, label_y)
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+
+        x = round(self.pos().x() / self.GRID_SIZE) * self.GRID_SIZE
+        y = round(self.pos().y() / self.GRID_SIZE) * self.GRID_SIZE
+        self.setPos(x, y)
 
 
 class WorkspaceView(QGraphicsView):
