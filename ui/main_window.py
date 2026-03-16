@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QGraphicsEllipseItem,
     QPushButton,
     QVBoxLayout,
+    QInputDialog,
     QWidget,
     QFrame,
 )
@@ -22,8 +23,45 @@ class BlockItem(QGraphicsRectItem):
     SNAP_DISTANCE = 30
     CONNECTOR_RADIUS = 5
 
+    def update_label_position(self) -> None:
+        text_rect = self.label.boundingRect()
+        rect = self.rect()
+
+        label_x = (rect.width() - text_rect.width()) / 2
+        label_y = (rect.height() - text_rect.height()) / 2
+        self.label.setPos(label_x, label_y)
+
+
+    def set_display_text(self, new_text: str) -> None:
+        self.display_text = new_text
+        self.label.setText(new_text)
+        self.update_label_position()
+
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if self.block_type == "corner":
+            super().mouseDoubleClickEvent(event)
+            return
+
+        current_text = self.display_text
+        new_text, ok = QInputDialog.getText(
+            None,
+            "Edit Block Name",
+            "Enter block name:",
+            text=current_text,
+        )
+
+        if ok:
+            cleaned_text = new_text.strip()
+            if cleaned_text:
+                self.set_display_text(cleaned_text)
+
+        super().mouseDoubleClickEvent(event)
+
     def __init__(self, text: str, block_type: str, x: float = 0, y: float = 0) -> None:
         self.block_type = block_type
+        self.display_text = text
+        
         width, height = 140, 50
 
         super().__init__(0, 0, width, height)
@@ -42,12 +80,7 @@ class BlockItem(QGraphicsRectItem):
         self.label.setBrush(QBrush(Qt.white))
         self.label.setFont(QFont("Segoe UI", 10))
 
-        text_rect = self.label.boundingRect()
-        rect = self.rect()
-
-        label_x = (rect.width() - text_rect.width()) / 2
-        label_y = (rect.height() - text_rect.height()) / 2
-        self.label.setPos(label_x, label_y)
+        self.update_label_position()
 
         self._create_connectors()
 
