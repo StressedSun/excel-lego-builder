@@ -1,5 +1,5 @@
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QPen, QKeySequence
 from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsRectItem,
@@ -214,6 +214,8 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
 
         self.block_counter = 0
+        self.clipboard_block_data = None
+        self.clipboard_cut_mode = False
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -249,18 +251,26 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.workspace_view, 3)
 
         self.add_button.clicked.connect(self.add_block)
+        self.block_list.itemDoubleClicked.connect(self.add_block_from_item)
+
+    def create_block(self, block_label: str, block_type: str, x: float, y: float) -> None:
+        block = BlockItem(block_label, block_type, x, y)
+        self.scene.addItem(block)
 
     def add_block(self) -> None:
         selected_item = self.block_list.currentItem()
         if selected_item is None:
             return
 
+        self.add_block_from_item(selected_item)
+
+    def add_block_from_item(self, item) -> None:
         self.block_counter += 1
 
         x = 60 + (self.block_counter % 5) * 160
         y = 60 + (self.block_counter // 5) * 80
 
-        selected_text = selected_item.text()
+        selected_text = item.text()
 
         if selected_text == "Row":
             block_type = "row"
@@ -269,5 +279,80 @@ class MainWindow(QMainWindow):
         else:
             block_type = "corner"
 
-        block = BlockItem(selected_text, block_type, x, y)
-        self.scene.addItem(block)
+        self.create_block(selected_text, block_type, x, y)
+
+    def get_selected_blocks(self) -> list:
+        return [
+            item for item in self.scene.selectedItems()
+            if isinstance(item, BlockItem)
+        ]
+
+    def delete_selected_blocks(self) -> None:
+        for block in self.get_selected_blocks():
+            self.scene.removeItem(block)
+
+    def copy_selected_block(self) -> None:
+        selected_blocks = self.get_selected_blocks()
+        if not selected_blocks:
+            return
+
+        block = selected_blocks[0]
+        self.clipboard_block_data = {
+            "text": block.display_text,
+            "block_type": block.block_type,
+            "x": block.pos().x(),
+            "y": block.pos().y(),
+        }
+        self.clipboard_cut_mode = False
+
+    def cut_selected_block(self) -> None:
+        selected_blocks = self.get_selected_blocks()
+        if not selected_blocks:
+            return
+
+        block = selected_blocks[0]
+        self.clipboard_block_data = {
+            "text": block.display_text,
+            "block_type": block.block_type,
+            "x": block.pos().x(),
+            "y": block.pos().y(),
+        }
+        self.clipboard_cut_mode = True
+        self.scene.removeItem(block)
+
+    def paste_block(self) -> None:
+        if self.clipboard_block_data is None:
+            return
+
+        new_x = self.clipboard_block_data["x"] + 30
+        new_y = self.clipboard_block_data["y"] + 30
+
+        self.create_block(
+            self.clipboard_block_data["text"],
+            self.clipboard_block_data["block_type"],
+            new_x,
+            new_y,
+        )
+
+        if self.clipboard_cut_mode:
+            self.clipboard_block_data = None
+            self.clipboard_cut_mode = False
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Delete:
+            self.delete_selected_blocks()
+            return
+
+        if event.matches(QKeySequence.Copy):
+            self.copy_selected_block()
+            return
+
+        if event.matches(QKeySequence.Cut):
+            self.cut_selected_block()
+            return
+
+        if event.matches(QKeySequence.Paste):
+            self.paste_block()
+            return
+
+        super().keyPressEvent(event)
