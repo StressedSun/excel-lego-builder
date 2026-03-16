@@ -22,10 +22,13 @@ class BlockItem(QGraphicsRectItem):
     SNAP_DISTANCE = 30
     CONNECTOR_RADIUS = 5
 
-    def __init__(self, text: str, x: float = 0, y: float = 0) -> None:
-        super().__init__(0, 0, 140, 50)
+    def __init__(self, text: str, block_type: str, x: float = 0, y: float = 0) -> None:
+        self.block_type = block_type
+        width, height = 140, 50
 
-        self.setBrush(QBrush(QColor(70, 130, 180)))
+        super().__init__(0, 0, width, height)
+
+        self.setBrush(QBrush(self.get_color()))
         self.setPen(QPen(QColor(220, 220, 220), 1))
 
         self.setFlags(
@@ -48,23 +51,49 @@ class BlockItem(QGraphicsRectItem):
 
         self._create_connectors()
 
+    def get_color(self) -> QColor:
+        if self.block_type == "row":
+            return QColor(70, 130, 180)   # blue
+        if self.block_type == "column":
+            return QColor(46, 125, 50)    # green
+        if self.block_type == "corner":
+            return QColor(120, 80, 160)   # purple
+        return QColor(100, 100, 100)
+
     def _create_connectors(self) -> None:
         rect = self.rect()
         r = self.CONNECTOR_RADIUS
         connector_brush = QBrush(QColor(235, 235, 235))
         connector_pen = QPen(QColor(40, 40, 40), 1)
 
-        center_y = rect.height() / 2 - r
+        mid_x = rect.width() / 2 - r
+        mid_y = rect.height() / 2 - r
 
-        self.left_connector = QGraphicsEllipseItem(-r, center_y, 2 * r, 2 * r, self)
-        self.left_connector.setBrush(connector_brush)
-        self.left_connector.setPen(connector_pen)
+        self.connectors = {}
 
-        self.right_connector = QGraphicsEllipseItem(
-            rect.width() - r, center_y, 2 * r, 2 * r, self
-        )
-        self.right_connector.setBrush(connector_brush)
-        self.right_connector.setPen(connector_pen)
+        # Column blocks connect horizontally
+        if self.block_type in ("column", "corner"):
+            self.connectors["left"] = QGraphicsEllipseItem(-r, mid_y, 2 * r, 2 * r, self)
+            self.connectors["left"].setBrush(connector_brush)
+            self.connectors["left"].setPen(connector_pen)
+
+            self.connectors["right"] = QGraphicsEllipseItem(
+                rect.width() - r, mid_y, 2 * r, 2 * r, self
+            )
+            self.connectors["right"].setBrush(connector_brush)
+            self.connectors["right"].setPen(connector_pen)
+
+        # Row blocks connect vertically
+        if self.block_type in ("row", "corner"):
+            self.connectors["top"] = QGraphicsEllipseItem(mid_x, -r, 2 * r, 2 * r, self)
+            self.connectors["top"].setBrush(connector_brush)
+            self.connectors["top"].setPen(connector_pen)
+
+            self.connectors["bottom"] = QGraphicsEllipseItem(
+                mid_x, rect.height() - r, 2 * r, 2 * r, self
+            )
+            self.connectors["bottom"].setBrush(connector_brush)
+            self.connectors["bottom"].setPen(connector_pen)    
 
     def mouseReleaseEvent(self, event) -> None:
         super().mouseReleaseEvent(event)
@@ -86,22 +115,33 @@ class BlockItem(QGraphicsRectItem):
 
             other_rect = item.sceneBoundingRect()
 
-            # Snap my left side to other's right side
-            if abs(my_rect.left() - other_rect.right()) < self.SNAP_DISTANCE:
-                if abs(my_rect.center().y() - other_rect.center().y()) < self.SNAP_DISTANCE:
-                    new_x = other_rect.right()
-                    new_y = other_rect.center().y() - my_rect.height() / 2
-                    self.setPos(new_x, new_y)
-                    return
+            # Column-to-column or column-to-corner horizontal snapping
+            if self.block_type in ("column", "corner") and item.block_type in ("column", "corner"):
+                # Snap my left to other's right
+                if abs(my_rect.left() - other_rect.right()) < self.SNAP_DISTANCE:
+                    if abs(my_rect.center().y() - other_rect.center().y()) < self.SNAP_DISTANCE:
+                        self.setPos(other_rect.right(), other_rect.center().y() - my_rect.height() / 2)
+                        return
 
-            # Snap my right side to other's left side
-            if abs(my_rect.right() - other_rect.left()) < self.SNAP_DISTANCE:
-                if abs(my_rect.center().y() - other_rect.center().y()) < self.SNAP_DISTANCE:
-                    new_x = other_rect.left() - my_rect.width()
-                    new_y = other_rect.center().y() - my_rect.height() / 2
-                    self.setPos(new_x, new_y)
-                    return
+                # Snap my right to other's left
+                if abs(my_rect.right() - other_rect.left()) < self.SNAP_DISTANCE:
+                    if abs(my_rect.center().y() - other_rect.center().y()) < self.SNAP_DISTANCE:
+                        self.setPos(other_rect.left() - my_rect.width(), other_rect.center().y() - my_rect.height() / 2)
+                        return
 
+            # Row-to-row or row-to-corner vertical snapping
+            if self.block_type in ("row", "corner") and item.block_type in ("row", "corner"):
+                # Snap my top to other's bottom
+                if abs(my_rect.top() - other_rect.bottom()) < self.SNAP_DISTANCE:
+                    if abs(my_rect.center().x() - other_rect.center().x()) < self.SNAP_DISTANCE:
+                        self.setPos(other_rect.center().x() - my_rect.width() / 2, other_rect.bottom())
+                        return
+
+                # Snap my bottom to other's top
+                if abs(my_rect.bottom() - other_rect.top()) < self.SNAP_DISTANCE:
+                    if abs(my_rect.center().x() - other_rect.center().x()) < self.SNAP_DISTANCE:
+                        self.setPos(other_rect.center().x() - my_rect.width() / 2, other_rect.top() - my_rect.height())
+                        return
 
 class WorkspaceView(QGraphicsView):
     def __init__(self, scene: QGraphicsScene) -> None:
@@ -159,11 +199,9 @@ class MainWindow(QMainWindow):
 
         self.block_list = QListWidget()
         self.block_list.addItems([
-            "Investment",
-            "Revenue",
-            "Cost",
-            "Category",
-            "Date",
+            "Row",
+            "Column",
+            "Corner",
         ])
         left_layout.addWidget(self.block_list)
 
@@ -189,5 +227,14 @@ class MainWindow(QMainWindow):
         x = 60 + (self.block_counter % 5) * 160
         y = 60 + (self.block_counter // 5) * 80
 
-        block = BlockItem(selected_item.text(), x, y)
+        selected_text = selected_item.text()
+
+        if selected_text == "Row":
+            block_type = "row"
+        elif selected_text == "Column":
+            block_type = "column"
+        else:
+            block_type = "corner"
+
+        block = BlockItem(selected_text, block_type, x, y)
         self.scene.addItem(block)
